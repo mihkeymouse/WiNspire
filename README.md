@@ -1,10 +1,10 @@
-# WiNspire
->Windows... on your calculator.
-
 <p align="center">
   <img src="docs-site/static/img/gallery/windows-xp-20260822-191427.jpg" width="560" alt="Windows XP Embedded running on a TI-Nspire CX II">
 </p>
-=
+
+# WiNspire
+>Windows... on your calculator.
+
 WiNspire is an x86 PC emulator for the TI-Nspire CX II / CX II CAS based on tiny386. It can boot every major Windows release from 1.0 to XP!*
 
 WiNspire has two modes - **Native** and **Server**

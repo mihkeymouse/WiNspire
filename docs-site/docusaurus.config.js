@@ -38,7 +38,7 @@ const config = {
         srcDark: 'img/winspire-wordmark-dark.svg'
       },
       items: [
-        {href: 'https://github.com/MalikIdreesHasanKhan/WiNspire', label: 'GitHub', position: 'left'}
+        {href: 'https://github.com/mihkeymouse/WiNspire', label: 'GitHub', position: 'left'}
       ]
     }
   }

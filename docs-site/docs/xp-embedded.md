@@ -66,7 +66,7 @@ Go to **Configuration > Check Dependencies** and resolve every dependency report
 Once the dependecy tree is clean, save the configuration.
 
 ## Optional: Luna, Bliss and desktop programs
-XP is not XP without its distinctive visual style and wallpaper. Also just a blank desktop is no fun for a demonstration! Before building the image you can add the `Themes` and `Luna visual style` components. You will need to copy `Bliss.bmp` over from a Donor XP image.
+XP is not XP without its distinctive visual style and wallpaper. Also just a blank desktop is no fun for a demonstration! Before building the image you can add the `Themes` and `Luna visual style` components. You will need to copy `Bliss.bmp` over from a Donor XP image, along with program exes and their dlls.
 
 ## 4. Build runtime
 

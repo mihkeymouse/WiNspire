@@ -9,7 +9,7 @@ The build was tested on Win11/WSL Ubuntu.
 Clone the repository:
 
 ```bash
-git clone https://github.com/MalikIdreesHasanKhan/WiNspire.git
+git clone https://github.com/mihkeymouse/WiNspire.git
 cd WiNspire
 ```
 
