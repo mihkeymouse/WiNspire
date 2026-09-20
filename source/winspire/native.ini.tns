@@ -1,0 +1,16 @@
+[pc]
+bios = bios.bin.tns
+vga_bios = vgabios.bin.tns
+mem_size = 16M
+vga_mem_size = 256K
+hda = win95.img.tns
+fill_cmos = 1
+
+[display]
+width = 320
+height = 240
+
+[cpu]
+gen = 4
+fpu = 0
+clock_hz = 4770000

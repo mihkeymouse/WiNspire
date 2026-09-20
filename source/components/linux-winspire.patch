@@ -1,0 +1,277 @@
+diff --git a/arch/arm/boot/dts/nspire-cx2.dts b/arch/arm/boot/dts/nspire-cx2.dts
+index dda7e548b..6b71e47e0 100644
+--- a/arch/arm/boot/dts/nspire-cx2.dts
++++ b/arch/arm/boot/dts/nspire-cx2.dts
+@@ -88,11 +88,10 @@ &vbus_reg {
+ 	// There are GPIOs for ID and VBus detection,
+ 	// but there is no driver for role switching, so gpio-usb-b-connector
+ 	// can't be used. So for now role (i.e. driver) and VBus have to be hardcoded.
+-	regulator-always-on;
+ };
+ 
+ &usb0 {
+-	compatible = "faraday,fotg210";
++	compatible = "faraday,fotg210-nspire-udc";
+ };
+ 
+ &usb1 {
+@@ -147,10 +146,21 @@ apb@90000000 {
+ 			#size-cells = <1>;
+ 
+ 			i2c@90050000 {
++				#address-cells = <1>;
++				#size-cells = <0>;
++
+ 				compatible = "snps,designware-i2c";
+ 				reg = <0x90050000 0x1000>;
+ 				interrupts = <20>;
+ 				clocks = <&apb_pclk>;
++
++				i2c-sda-falling-time-ns = <810>;
++				i2c-scl-falling-time-ns = <2410>;
++
++				touchpad@a {
++					compatible = "ti,nspire-captivate";
++					reg = <0x0a>;
++				};
+ 			};
+ 		};
+ 	};
+diff --git a/drivers/input/mouse/Makefile b/drivers/input/mouse/Makefile
+index e49f08565..6ba222c7a 100644
+--- a/drivers/input/mouse/Makefile
++++ b/drivers/input/mouse/Makefile
+@@ -45,3 +45,5 @@ psmouse-$(CONFIG_MOUSE_PS2_SMBUS)	+= psmouse-smbus.o
+ elan_i2c-objs := elan_i2c_core.o
+ elan_i2c-$(CONFIG_MOUSE_ELAN_I2C_I2C)	+= elan_i2c_i2c.o
+ elan_i2c-$(CONFIG_MOUSE_ELAN_I2C_SMBUS)	+= elan_i2c_smbus.o
++
++obj-y += nspire_captivate_i2c.o
+diff --git a/drivers/input/mouse/nspire_captivate_i2c.c b/drivers/input/mouse/nspire_captivate_i2c.c
+new file mode 100755
+index 000000000..ab9e1bedb
+--- /dev/null
++++ b/drivers/input/mouse/nspire_captivate_i2c.c
+@@ -0,0 +1,222 @@
++/*
++ * TI-Nspire CX II CapTIvate touchpad.
++ *
++ * Later CX II hardware uses the CapTIvate protocol rather than the older
++ * Synaptics TM-603 register protocol.  Both devices use I2C address 0x20,
++ * so the protocol must be selected by the device-tree compatible string.
++ */
++
++#include <linux/delay.h>
++#include <linux/i2c.h>
++#include <linux/input.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/slab.h>
++#include <linux/workqueue.h>
++
++#define DRIVER_NAME                 "nspire_captivate"
++#define CAPTIVATE_CMD_REPORT       0x01
++#define CAPTIVATE_CMD_STATUS       0x06
++#define CAPTIVATE_CMD_SIZE         0x07
++#define CAPTIVATE_DEFAULT_MAX_X    0x0918
++#define CAPTIVATE_DEFAULT_MAX_Y    0x069b
++#define CAPTIVATE_POLL_MS          12
++
++struct nspire_captivate {
++	struct i2c_client *client;
++	struct input_dev *input;
++	struct delayed_work work;
++	u16 max_x;
++	u16 max_y;
++};
++
++/*
++ * CapTIvate expects the command write and response read in one transaction.
++ * Keeping both messages in a single i2c_transfer() gives it the repeated
++ * START used by the calculator OS; two i2c_master_*() calls insert a STOP and
++ * the real device rejects the following read.  Firebird does not model that
++ * bus-level distinction, which is why the split form appeared to work there.
++ */
++static int nspire_captivate_read(struct i2c_client *client, u8 command,
++					 u8 *data, int length)
++{
++	struct i2c_msg messages[2] = {
++		{
++			.addr = client->addr,
++			.flags = client->flags,
++			.len = 1,
++			.buf = &command,
++		},
++		{
++			.addr = client->addr,
++			.flags = client->flags | I2C_M_RD,
++			.len = length,
++			.buf = data,
++		},
++	};
++	int ret;
++
++	ret = i2c_transfer(client->adapter, messages, ARRAY_SIZE(messages));
++	if (ret != ARRAY_SIZE(messages))
++		return ret < 0 ? ret : -EIO;
++
++	return 0;
++}
++
++static void nspire_captivate_report(struct nspire_captivate *touch)
++{
++	u8 report[6];
++	u16 x, y;
++	int ret;
++	bool touched, pressed;
++
++	ret = nspire_captivate_read(touch->client, CAPTIVATE_CMD_REPORT,
++					    report, sizeof(report));
++	if (ret) {
++		dev_dbg(&touch->client->dev, "report read failed: %d\n", ret);
++		return;
++	}
++
++	/* Hackspire documents CapTIvate coordinates as little-endian. */
++	x = report[2] | ((u16)report[3] << 8);
++	y = report[4] | ((u16)report[5] << 8);
++	touched = !!(report[1] & BIT(1));
++	pressed = !!(report[1] & BIT(0));
++
++	input_report_abs(touch->input, ABS_X, min_t(u16, x, touch->max_x));
++	input_report_abs(touch->input, ABS_Y, min_t(u16, y, touch->max_y));
++	input_report_key(touch->input, BTN_TOUCH, touched);
++	input_report_key(touch->input, BTN_TOOL_FINGER, touched);
++	input_report_key(touch->input, BTN_LEFT, pressed);
++	input_sync(touch->input);
++}
++
++static void nspire_captivate_work(struct work_struct *work)
++{
++	struct nspire_captivate *touch =
++		container_of(work, struct nspire_captivate, work.work);
++
++	nspire_captivate_report(touch);
++	mod_delayed_work(system_wq, &touch->work,
++			msecs_to_jiffies(CAPTIVATE_POLL_MS));
++}
++
++static int nspire_captivate_open(struct input_dev *input)
++{
++	struct nspire_captivate *touch = input_get_drvdata(input);
++
++	mod_delayed_work(system_wq, &touch->work, 0);
++	return 0;
++}
++
++static void nspire_captivate_close(struct input_dev *input)
++{
++	struct nspire_captivate *touch = input_get_drvdata(input);
++
++	cancel_delayed_work_sync(&touch->work);
++}
++
++static int nspire_captivate_probe(struct i2c_client *client,
++					  const struct i2c_device_id *id)
++{
++	struct nspire_captivate *touch;
++	struct input_dev *input;
++	u8 status[6];
++	u8 size[6];
++	int ret;
++
++	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C))
++		return -ENODEV;
++
++	/* A status transaction is also a protocol-specific hardware probe. */
++	ret = nspire_captivate_read(client, CAPTIVATE_CMD_STATUS,
++					    status, sizeof(status));
++	if (ret) {
++		dev_err(&client->dev,
++			"CapTIvate combined status transaction failed: %d\n", ret);
++		return ret;
++	}
++
++	touch = devm_kzalloc(&client->dev, sizeof(*touch), GFP_KERNEL);
++	if (!touch)
++		return -ENOMEM;
++
++	touch->client = client;
++	touch->max_x = CAPTIVATE_DEFAULT_MAX_X;
++	touch->max_y = CAPTIVATE_DEFAULT_MAX_Y;
++
++	ret = nspire_captivate_read(client, CAPTIVATE_CMD_SIZE,
++					    size, sizeof(size));
++	if (!ret) {
++		if (size[2] | ((u16)size[3] << 8))
++			touch->max_x = size[2] | ((u16)size[3] << 8);
++		if (size[4] | ((u16)size[5] << 8))
++			touch->max_y = size[4] | ((u16)size[5] << 8);
++	}
++
++	input = devm_input_allocate_device(&client->dev);
++	if (!input)
++		return -ENOMEM;
++
++	input->name = "nspire-captivate";
++	input->phys = "nspire-captivate/input0";
++	input->id.bustype = BUS_I2C;
++	input->dev.parent = &client->dev;
++	input->open = nspire_captivate_open;
++	input->close = nspire_captivate_close;
++	input_set_drvdata(input, touch);
++	input_set_capability(input, EV_KEY, BTN_LEFT);
++	input_set_capability(input, EV_KEY, BTN_TOUCH);
++	input_set_capability(input, EV_KEY, BTN_TOOL_FINGER);
++	input_set_abs_params(input, ABS_X, 0, touch->max_x, 0, 0);
++	input_set_abs_params(input, ABS_Y, 0, touch->max_y, 0, 0);
++
++	touch->input = input;
++	INIT_DELAYED_WORK(&touch->work, nspire_captivate_work);
++	i2c_set_clientdata(client, touch);
++
++	ret = input_register_device(input);
++	if (ret)
++		return ret;
++
++	dev_info(&client->dev,
++		 "CapTIvate ready status=%u size=%ux%u polling=%ums\n",
++		 status[1], touch->max_x, touch->max_y, CAPTIVATE_POLL_MS);
++	return 0;
++}
++
++static int nspire_captivate_remove(struct i2c_client *client)
++{
++	struct nspire_captivate *touch = i2c_get_clientdata(client);
++
++	cancel_delayed_work_sync(&touch->work);
++	return 0;
++}
++
++static const struct of_device_id nspire_captivate_of_match[] = {
++	{ .compatible = "ti,nspire-captivate" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, nspire_captivate_of_match);
++
++static const struct i2c_device_id nspire_captivate_id[] = {
++	{ "nspire_captivate", 0 },
++	{ }
++};
++MODULE_DEVICE_TABLE(i2c, nspire_captivate_id);
++
++static struct i2c_driver nspire_captivate_driver = {
++	.driver = {
++		.name = DRIVER_NAME,
++		.of_match_table = nspire_captivate_of_match,
++	},
++	.probe = nspire_captivate_probe,
++	.remove = nspire_captivate_remove,
++	.id_table = nspire_captivate_id,
++};
++
++module_i2c_driver(nspire_captivate_driver);
++
++MODULE_DESCRIPTION("TI-Nspire CX II CapTIvate I2C touchpad");
++MODULE_AUTHOR("nspire95 project");
++MODULE_LICENSE("GPL");

@@ -1,0 +1,15 @@
+:root {
+  --ifm-color-primary: #174aa3;
+  --ifm-color-primary-dark: #154393;
+  --ifm-color-primary-darker: #143f8b;
+  --ifm-color-primary-darkest: #113575;
+  --ifm-color-primary-light: #2e5cac;
+  --ifm-color-primary-lighter: #3a65b1;
+  --ifm-color-primary-lightest: #5d80bf;
+  --winspire-secondary: #008272;
+  --winspire-accent: #245edb;
+  --ifm-background-color: #eef7fb;
+  --ifm-background-surface-color: #ffffff;
+  --ifm-font-color-base: #202a3a;
+  --ifm-color-emphasis-300: #91a7c3;
+}

@@ -1,0 +1,19 @@
+# Build output
+/build/
+/server/
+
+# Local disk images and logs
+*.img
+*.iso
+*.vdi
+*.vhd
+*.vhdx
+*.vmdk
+*.qcow2
+*.log
+netlog*.txt
+run*.txt
+
+# OS metadata
+.DS_Store
+Thumbs.db

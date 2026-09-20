@@ -1,0 +1,13 @@
+[submodule "source/components/linux"]
+	path = source/components/linux
+	url = https://github.com/Vogtinator/linux.git
+	branch = cxII-usb-host
+[submodule "source/components/seabios"]
+	path = source/components/seabios
+	url = https://github.com/coreboot/seabios.git
+[submodule "source/components/linuxloader2"]
+	path = source/components/linuxloader2
+	url = https://github.com/tangrs/nspire-linux-loader2.git
+[submodule "source/components/ndless"]
+	path = source/components/ndless
+	url = https://github.com/ndless-nspire/Ndless.git

@@ -1,0 +1,232 @@
+{
+  "groups": [
+    {
+      "id": "early",
+      "label": "Windows 1.x–3.x"
+    },
+    {
+      "id": "windows-9x",
+      "label": "Windows 9x"
+    },
+    {
+      "id": "windows-2000",
+      "label": "Windows 2000"
+    },
+    {
+      "id": "windows-xp",
+      "label": "Windows XP / Embedded"
+    }
+  ],
+  "items": [
+    {
+      "id": "early-20260822-162913",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 1.0 Premiere Edition",
+      "url": "/img/gallery/early-20260822-162913.jpg"
+    },
+    {
+      "id": "early-20260822-162741",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 1.0 UI",
+      "url": "/img/gallery/early-20260822-162741.jpg"
+    },
+    {
+      "id": "early-20260822-163025",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 2.0 splash",
+      "url": "/img/gallery/early-20260822-163025.jpg"
+    },
+    {
+      "id": "early-20260813-232842",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 2.0 UI",
+      "url": "/img/gallery/early-20260813-232842.jpg"
+    },
+    {
+      "id": "early-20260822-163101",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 2.0 UI",
+      "url": "/img/gallery/early-20260822-163101.jpg"
+    },
+    {
+      "id": "early-20260822-163344",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 3.1 Splash",
+      "url": "/img/gallery/early-20260822-163344.jpg"
+    },
+    {
+      "id": "early-20260813-222024",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 3.1 UI",
+      "url": "/img/gallery/early-20260813-222024.jpg"
+    },
+    {
+      "id": "early-20260813-222033",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 3.1 UI",
+      "url": "/img/gallery/early-20260813-222033.jpg"
+    },
+    {
+      "id": "early-20260822-163537",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 3.1 Minesweeper",
+      "url": "/img/gallery/early-20260822-163537.jpg"
+    },
+    {
+      "id": "early-20260822-163600",
+      "group": "early",
+      "title": "Windows 1.x–3.x",
+      "alt": "Windows 3.1 Solitaire",
+      "url": "/img/gallery/early-20260822-163600.jpg"
+    },
+    {
+      "id": "windows-9x-windows-95-startup",
+      "group": "windows-9x",
+      "title": "Windows 95",
+      "alt": "Win95 splash",
+      "url": "/img/gallery/windows-9x-windows-95-startup.jpg"
+    },
+    {
+      "id": "windows-9x-solitaire",
+      "group": "windows-9x",
+      "title": "Windows95",
+      "alt": "Solitaire on Win95",
+      "url": "/img/gallery/windows-9x-solitaire.jpg"
+    },
+    {
+      "id": "windows-me-20260824-202807",
+      "group": "windows-9x",
+      "title": "Windows Me",
+      "alt": "Splash",
+      "url": "/img/gallery/windows-me-20260824-202807.jpg"
+    },
+    {
+      "id": "windows-9x-calculator",
+      "group": "windows-9x",
+      "title": "Windows95",
+      "alt": "Calculator on Windows 95 on calculator",
+      "url": "/img/gallery/windows-9x-calculator.jpg"
+    },
+    {
+      "id": "windows-me-20260824-211249",
+      "group": "windows-9x",
+      "title": "Windows Me",
+      "alt": "Explorer WinME",
+      "url": "/img/gallery/windows-me-20260824-211249.jpg"
+    },
+    {
+      "id": "windows-9x-carmen-sandiego",
+      "group": "windows-9x",
+      "title": "Windows95",
+      "alt": "Carmen sandiego",
+      "url": "/img/gallery/windows-9x-carmen-sandiego.jpg"
+    },
+    {
+      "id": "windows-me-20260824-210013",
+      "group": "windows-9x",
+      "title": "Windows Me",
+      "alt": "Start menu WinME",
+      "url": "/img/gallery/windows-me-20260824-210013.jpg"
+    },
+    {
+      "id": "windows-me-20260824-192105",
+      "group": "windows-9x",
+      "title": "Windows Me",
+      "alt": "Windows ME desktop",
+      "url": "/img/gallery/windows-me-20260824-192105.jpg"
+    },
+    {
+      "id": "windows-me-20260824-201829",
+      "group": "windows-9x",
+      "title": "Windows Me",
+      "alt": "Windows Movie maker WinME",
+      "url": "/img/gallery/windows-me-20260824-201829.jpg"
+    },
+    {
+      "id": "windows-2000-20260824-124254",
+      "group": "windows-2000",
+      "title": "Windows 2000",
+      "alt": "Win2k Splash",
+      "url": "/img/gallery/windows-2000-20260824-124254.jpg"
+    },
+    {
+      "id": "windows-2000-20260824-155735",
+      "group": "windows-2000",
+      "title": "Windows 2000",
+      "alt": "Win2k desktop",
+      "url": "/img/gallery/windows-2000-20260824-155735.jpg"
+    },
+    {
+      "id": "windows-2000-20260824-155855",
+      "group": "windows-2000",
+      "title": "Windows 2000",
+      "alt": "Win2k start",
+      "url": "/img/gallery/windows-2000-20260824-155855.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-151833",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "XP desktop on nspire",
+      "url": "/img/gallery/windows-xp-20260822-151833.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-152813",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "XP desktop with start menu",
+      "url": "/img/gallery/windows-xp-20260822-152813.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-191427",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "Winver screen",
+      "url": "/img/gallery/windows-xp-20260822-191427.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-200717",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "Calculator on Windows XP on Calculator",
+      "url": "/img/gallery/windows-xp-20260822-200717.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-201523",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "Notepad",
+      "url": "/img/gallery/windows-xp-20260822-201523.jpg"
+    },
+    {
+      "id": "windows-xp-20260822-165631",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "XPe Splash (Head photobomb)",
+      "url": "/img/gallery/windows-xp-20260822-165631.jpg"
+    },
+    {
+      "id": "windows-xp-20260821-223920",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "Loading your personal settings",
+      "url": "/img/gallery/windows-xp-20260821-223920.jpg"
+    },
+    {
+      "id": "windows-xp-20260815-180103",
+      "group": "windows-xp",
+      "title": "Windows XP Embedded",
+      "alt": "Showing product activhttp://127.0.0.1:3000/img/gallery/windows-xp-20260822-201523.jpgation error",
+      "url": "/img/gallery/windows-xp-20260815-180103.jpg"
+    }
+  ]
+}
