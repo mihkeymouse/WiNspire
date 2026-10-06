@@ -38,6 +38,11 @@
 #define I386_ENABLE_FPU 1
 #else
 #define BUILD_NSPIRE 1
+/* Restore native nspire95 input/video servicing, including a host time bound. */
+#define TINY386_PC_STEP_COUNT 1024
+#define TINY386_NSPIRE_CPU_TIME_BUDGET_US 20000
+#define REP_SLICE_ENABLED 1
+#define REP_SLICE 256
 #endif
 
 #endif

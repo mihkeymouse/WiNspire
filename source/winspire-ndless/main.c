@@ -7,6 +7,8 @@
 #include <time.h>
 
 #include "pc.h"
+#include "native_clock.h"
+static NativeClock native_host_clock;
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
@@ -364,9 +366,14 @@ int load_rom(void *guest_memory, const char *path, uword address, int backward)
 	return (int)file_size;
 }
 
+uint32_t nspire_host_uticks(void)
+{
+	return (uint32_t)native_clock_us(&native_host_clock);
+}
+
 static uint64_t host_millis(void)
 {
-	return (uint64_t)(((unsigned long)clock() * 1000UL) / CLOCKS_PER_SEC);
+	return native_clock_us(&native_host_clock) / 1000ULL;
 }
 
 /* main() checks for CX II before any LCD register access. */
@@ -885,6 +892,7 @@ int main(int argc, char **argv)
 	reset_guest_timer();
 	pc = pc_new(redraw, &display, display.framebuffer, &config);
 	load_bios_and_reset(pc);
+	native_clock_start(&native_host_clock);
 	saved_cursor = hide_os_cursor();
 	vga_refresh(pc->vga, redraw, &display, 1);
 	reset_guest_timer();
@@ -892,6 +900,10 @@ int main(int argc, char **argv)
 	pc->boot_start_time = get_uticks();
 
 	while (pc->shutdown_state != 8 && !on_key_pressed()) {
+		if ((loops & (input_poll_loops - 1)) == 0) {
+			poll_keys(pc);
+			poll_touchpad_mouse(pc);
+		}
 		pc_step(pc);
 		advance_guest_timer(pc);
 		if (!first_step_done) {
@@ -901,10 +913,6 @@ int main(int argc, char **argv)
 			first_step_done = true;
 		}
 		loops++;
-		if ((loops & (input_poll_loops - 1)) == 0) {
-			poll_keys(pc);
-			poll_touchpad_mouse(pc);
-		}
 		if ((loops & (video_poll_loops - 1)) == 0) {
 			pc_vga_step(pc);
 			flush_redraw(&display);
@@ -914,6 +922,7 @@ int main(int argc, char **argv)
 	}
 	if (on_key_pressed())
 		wait_no_key_pressed();
+	native_clock_stop(&native_host_clock);
 	lcd_init(SCR_TYPE_INVALID);
 	restore_os_cursor(saved_cursor);
 	refresh_osscr();
