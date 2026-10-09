@@ -1,6 +1,6 @@
 #ifndef WINSPIRE_RUNTIME_POLICY_H
 #define WINSPIRE_RUNTIME_POLICY_H
-/* Shared Server and desktop runtime defaults; explicit overrides win. */
+/* Server/SDL defaults. */
 #define E_RT "TINY386_HEADLESS_REALTIME"
 #define E_SCALE "TINY386_GUEST_CYCLE_SCALE"
 #define E_IDLE "TINY386_IDLE_ASSIST"
@@ -16,7 +16,7 @@
 
 static void set_default(const char *name, const char *value)
 {
-	/* Keep existing overrides. */
+	/* Keep user overrides. */
 	setenv(name, value, 0);
 }
 
@@ -74,13 +74,12 @@ static void profile_apply(const char *config_path)
 		set_default(E_IDLE, "0");
 		set_default(E_MOVS, "0");
 		set_default(E_STOS, "0");
-		/* Service retrace every batch, matching the nspire95 frontend. */
+		/* Poll video each batch. */
 		set_default(E_VGA, "1");
 		set_default(E_VGA_FULL, "0");
-		/* Refresh immediately after input. */
 		set_default(E_INPUT, "1");
 		set_default(E_BURST, "256");
-		/* Briefly hold transitions, then reveal real DOS prompts. */
+		/* Show DOS prompts after transitions. */
 		set_default(E_TEXT, "4");
 		set_default(E_2K_FAST, "0");
 	}

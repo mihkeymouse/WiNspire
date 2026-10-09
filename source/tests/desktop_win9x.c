@@ -133,7 +133,7 @@ static void redraw(void *opaque,
 	SDL_PumpEvents();
 }
 
-/* we assume Xorg is used with a PC keyboard. Return 0 if no keycode found. */
+/* Xorg scancodes. */
 static int sdl_get_keycode(const SDL_KeyboardEvent *ev)
 {
 	int keycode = ev->keysym.scancode;
@@ -169,7 +169,6 @@ static int sdl_get_keycode(const SDL_KeyboardEvent *ev)
 	return keycode;
 }
 
-/* release all pressed keys */
 #define KEYCODE_MAX 127
 static uint8_t key_pressed[KEYCODE_MAX + 1];
 
@@ -192,7 +191,7 @@ static void sdl_handle_key_event(const SDL_KeyboardEvent *ev, PC *pc)
 	if (keycode) {
 #if SDL_PATCHLEVEL < 50 /* not sdl12-compat */
 		if (keycode == 0x3a || keycode ==0x45) {
-			/* SDL does not generate key up for numlock & caps lock */
+			/* SDL omits lock-key releases. */
 			ps2_put_keycode(pc->kbd, 1, keycode);
 			ps2_put_keycode(pc->kbd, 0, keycode);
 		} else
@@ -204,8 +203,7 @@ static void sdl_handle_key_event(const SDL_KeyboardEvent *ev, PC *pc)
 			ps2_put_keycode(pc->kbd, keypress, keycode);
 		}
 	} else if (ev->type == SDL_KEYUP) {
-		/* workaround to reset the keyboard state (used when changing
-		   desktop with ctrl-alt-x on Linux) */
+		/* Reset keys after a focus change. */
 		sdl_reset_keys(pc);
 	}
 }
@@ -223,8 +221,8 @@ static void sdl_send_mouse_event(PC *pc, int x1, int y1,
 	if (state & SDL_BUTTON(SDL_BUTTON_MIDDLE))
 		buttons |= (1 << 2);
 	if (is_absolute) {
-		x = 0;//(x1 * 32768) / screen_width;
-		y = 0;//(y1 * 32768) / screen_height;
+		x = 0;
+		y = 0;
 	} else {
 		x = x1;
 		y = y1;
@@ -234,7 +232,7 @@ static void sdl_send_mouse_event(PC *pc, int x1, int y1,
 
 static void sdl_handle_mouse_motion_event(const SDL_Event *ev, PC *pc)
 {
-	bool is_absolute = 0; //vm_mouse_is_absolute(m);
+	bool is_absolute = 0;
 	int x, y;
 	if (is_absolute) {
 		x = ev->motion.x;
@@ -248,7 +246,7 @@ static void sdl_handle_mouse_motion_event(const SDL_Event *ev, PC *pc)
 
 static void sdl_handle_mouse_button_event(const SDL_Event *ev, PC *pc)
 {
-	bool is_absolute = 0; //vm_mouse_is_absolute(m);
+	bool is_absolute = 0;
 	int state, dz;
 
 	dz = 0;
@@ -261,7 +259,6 @@ static void sdl_handle_mouse_button_event(const SDL_Event *ev, PC *pc)
 	}
 
 	state = SDL_GetMouseState(NULL, NULL);
-	/* just in case */
 	if (ev->type == SDL_MOUSEBUTTONDOWN)
 		state |= SDL_BUTTON(ev->button.button);
 	else
@@ -324,7 +321,7 @@ static int poll(void *opaque)
 					s->osd,
 					ev.button.x, ev.button.y,
 					ev.type == SDL_MOUSEBUTTONDOWN,
-					1 /* XXX */);
+					1);
 			else
 				sdl_handle_mouse_button_event(&ev, s->pc);
 			break;

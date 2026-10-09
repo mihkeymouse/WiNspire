@@ -67,13 +67,13 @@ int main(void) {
     const uint8_t stos[]={0xf3,0xaa,0xf4};
     run_string(p,stos,sizeof(stos),20000,0,0x50000,0);
     for(unsigned i=0;i<20000;i++) assert(p->phys_mem[0x50000+i]==0);
-    /* The early stop of a comparison beyond a slice must preserve flags/CX. */
+    /* Stop at a mismatch. */
     memcpy(p->phys_mem+0x50000,p->phys_mem+0x20000,20000);p->phys_mem[0x50000+10000]^=1;
     const uint8_t cmps[]={0xf3,0xa6,0xf4};
     run_string(p,cmps,sizeof(cmps),20000,0x20000,0x50000,0);
     CPUI386Snapshot s;cpui386_snapshot(p->cpu,&s);assert(s.gpr[1]==9999);
     assert(!(cpu_getflags(p->cpu)&0x40));
-    /* 16-bit address/count decoding uses the same yielding path. */
+    /* 16-bit addresses. */
     memcpy(p->phys_mem+0x3000,p->phys_mem+0x20000,12000);
     const uint8_t addr16[]={0x67,0xf3,0xa4,0xf4};
     run_string(p,addr16,sizeof(addr16),12000,0x3000,0x8000,0);

@@ -8,7 +8,7 @@ int main(void) {
     PCConfig c={0};c.mem_size=2*1024*1024;c.vga_mem_size=256*1024;
     c.cpu_gen=4;c.width=320;c.height=240;
     PC *p=pc_new(NULL,NULL,calloc(320*240,2),&c);assert(p);
-    /* PIT channel 0, LSB-only mode 2: wait for its counter to change. */
+    /* Wait for the PIT counter. */
     const uint8_t code[]={0xb0,0x14,0xe6,0x43,0xb0,100,0xe6,0x40,
         0xe4,0x40,0x88,0xc3,0xe4,0x40,0x38,0xd8,0x74,0xfa,0xf4};
     memcpy(p->phys_mem+0x1000,code,sizeof(code));cpui386_reset_pm(p->cpu,0x1000);
