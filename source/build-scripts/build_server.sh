@@ -26,6 +26,8 @@ mkdir -p "$emulator_out" "$helpers"
 mkdir -p "$busybox_out"
 tar -xjf "$busybox_src" -C "$busybox_out" --strip-components=1
 cp "$busybox_config" "$busybox_out/.config"
+# Strip CRLF for BusyBox.
+sed -i 's/\r$//' "$busybox_out/.config"
 make -C "$busybox_out" ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- oldconfig </dev/null >/dev/null
 make -C "$busybox_out" -j2 ARCH=arm CROSS_COMPILE=arm-linux-gnueabi- >/dev/null
 

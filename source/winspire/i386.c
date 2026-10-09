@@ -1,4 +1,5 @@
 #include "i386.h"
+#include "native_diag.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -107,6 +108,7 @@ struct CPUI386 {
 
 	bool nspire_bulk_rep_ram;
 	bool nspire_bulk_rep_stos;
+	bool rep_yield;
 #if defined(TINY386_ARM_FAST) && \
 	defined(WIN2K_FAST_ENABLED)
 	bool win2k_boot_fast;
@@ -3213,7 +3215,7 @@ static bool call_isr(CPUI386 *cpu, int no, bool pusherr, int ext);
 #define NORMAL_RAM_RANGE(addr, len) false
 #endif
 
-#if defined(TINY386_ARM_FAST) && defined(REP_SLICE_ENABLED)
+#if defined(REP_SLICE_ENABLED)
 // REP instructions may be interrupted between iterations on real hardware
 #ifndef REP_SLICE
 #ifdef TINY386_SPEED_BUILD
@@ -3224,13 +3226,13 @@ static bool call_isr(CPUI386 *cpu, int no, bool pusherr, int ext);
 #endif
 #define NSPIRE_LIMIT_REP_COUNT(count) \
 	do { \
-		if ((cpu->nspire_bulk_rep_ram || cpu->nspire_bulk_rep_stos) && \
+		if (cpu->rep_yield && \
 		    (count) > REP_SLICE) \
 			(count) = REP_SLICE; \
 	} while (0)
 #define YIELD_REP(ABIT) \
 	do { \
-		if ((cpu->nspire_bulk_rep_ram || cpu->nspire_bulk_rep_stos) && \
+		if (cpu->rep_yield && \
 		    lreg ## ABIT(1)) { \
 			cpu->next_ip = cpu->ip; \
 			return true; \
@@ -4677,6 +4679,10 @@ static void nspire_log_recent_instructions(void);
 #define C_16(_1, ...) CX(_1) C_15(__VA_ARGS__)
 #define C(...) PASTE(C_, ARGCOUNT(__VA_ARGS__))(__VA_ARGS__)
 
+#if defined(BUILD_NSPIRE) && defined(TINY386_NSPIRE_CPU_TIME_BUDGET_US)
+uint32_t nspire_host_uticks(void);
+#endif
+
 static bool IRAM_ATTR_CPU_EXEC1 cpu_exec1(CPUI386 *cpu, int stepcount)
 {
 #ifndef I386_OPT2
@@ -4701,7 +4707,19 @@ static bool IRAM_ATTR_CPU_EXEC1 cpu_exec1(CPUI386 *cpu, int stepcount)
 	u8 modrm;
 	OptAddr meml;
 	uword addr;
+#if defined(BUILD_NSPIRE) && defined(TINY386_NSPIRE_CPU_TIME_BUDGET_US)
+	uint32_t host_start = nspire_host_uticks();
+	unsigned host_checks = 0;
+#endif
 	for (; stepcount > 0; stepcount--) {
+#if defined(BUILD_NSPIRE) && defined(TINY386_NSPIRE_CPU_TIME_BUDGET_US)
+	if ((host_checks++ & 63U) == 0 &&
+	    (uint32_t)(nspire_host_uticks() - host_start) >=
+	        TINY386_NSPIRE_CPU_TIME_BUDGET_US) {
+		NATIVE_DIAG(native_diag.budget_exits++);
+		return true;
+	}
+#endif
 	bool code16 = cpu->code16;
 	uword sp_mask = cpu->sp_mask;
 
@@ -6581,6 +6599,7 @@ void cpui386_step(CPUI386 *cpu, int stepcount)
 	int ret = cpu_exec1(cpu, stepcount);
 	cpu->ifetch.paddr = 0;
 	if (!ret) {
+		NATIVE_DIAG(native_diag.exceptions++; native_diag.last_exception=cpu->excno);
 #if defined(I386_DIAG_TRACE) || (defined(BUILD_NSPIRE) && !defined(TINY386_NO_LOG))
 		nspire_log_exception_site(cpu);
 #endif
@@ -6769,6 +6788,8 @@ CPUI386 *cpui386_new(int gen, char *phys_mem, long phys_mem_size, CPU_CB **cb)
 	default: assert(false);
 	}
 	cpu->gen = gen;
+	cpu->nspire_bulk_rep_ram = false;
+	cpu->nspire_bulk_rep_stos = false;
 
 	cpu->tlb.size = tlb_size;
 #ifdef BUILD_ESP32
@@ -6805,6 +6826,7 @@ CPUI386 *cpui386_new(int gen, char *phys_mem, long phys_mem_size, CPU_CB **cb)
 	}
 #endif
 
+	cpu->rep_yield = gen <= 4 || cpu->nspire_bulk_rep_ram || cpu->nspire_bulk_rep_stos;
 	cpu->cycle = 0;
 
 	cpu->intr = false;

@@ -227,91 +227,7 @@ static int config_select(char *selected, size_t selected_size)
 #endif
 
 #ifdef TINY386_HEADLESS_DIAG
-#define E_RT "TINY386_HEADLESS_REALTIME"
-#define E_SCALE "TINY386_GUEST_CYCLE_SCALE"
-#define E_IDLE "TINY386_IDLE_ASSIST"
-#define E_MOVS "TINY386_BULK_REP_RAM"
-#define E_STOS "TINY386_BULK_REP_STOS"
-#define E_VGA "TINY386_HEADLESS_VGA_EVERY"
-#define E_VGA_FULL "TINY386_HEADLESS_VGA_FULL_EVERY"
-#define E_INPUT "TINY386_HEADLESS_VGA_INPUT_EVERY"
-#define E_BURST "TINY386_HEADLESS_VGA_INPUT_BURST"
-#define E_TEXT "TINY386_VGA_TEXT_TRANSITION_HOLD"
-#define E_2K_FAST "TINY386_WIN2K_BOOT_FAST"
-
-static void set_default(const char *name, const char *value)
-{
-	/* Keep existing overrides. */
-	setenv(name, value, 0);
-}
-
-static const char *profile_name(const char *config_path)
-{
-	const char *requested = getenv("WINSPIRE_PROFILE");
-	const char *base;
-
-	if (requested && *requested)
-		return requested;
-	base = strrchr(config_path, '/');
-	return base ? base + 1 : config_path;
-}
-
-static void profile_apply(const char *config_path)
-{
-	const char *profile = profile_name(config_path);
-
-	if (strncmp(profile, "win2000", 7) == 0) {
-		set_default(E_RT, "1");
-		set_default(E_SCALE, "1");
-		set_default(E_IDLE, "0");
-		set_default(E_MOVS, "0");
-		set_default(E_STOS, "1");
-		set_default(E_VGA, "512");
-		set_default(E_VGA_FULL, "0");
-		set_default(E_INPUT, "4");
-		set_default(E_BURST, "256");
-		set_default(E_TEXT, "0");
-		set_default(E_2K_FAST, "1");
-	} else if (strncmp(profile, "xpe", 3) == 0) {
-		set_default(E_RT, "0");
-		set_default(E_SCALE, "1");
-		set_default(E_IDLE, "1");
-		set_default(E_MOVS, "1");
-		set_default(E_STOS, "1");
-		set_default(E_VGA, "2048");
-		set_default(E_VGA_FULL, "2048");
-		set_default(E_INPUT, "8");
-		set_default(E_BURST, "128");
-		set_default(E_TEXT, "0");
-		set_default(E_2K_FAST, "0");
-	} else if (strncmp(profile, "win9x", 5) == 0) {
-		set_default(E_RT, "0");
-		set_default(E_SCALE, "12");
-		set_default(E_IDLE, "0");
-		set_default(E_MOVS, "0");
-		set_default(E_STOS, "0");
-		/* Match native refresh timing. */
-		set_default(E_VGA, "8");
-		set_default(E_VGA_FULL, "0");
-		/* Refresh immediately after input. */
-		set_default(E_INPUT, "1");
-		set_default(E_BURST, "256");
-		/* Ignore transient Win9x text-mode switches. */
-		set_default(E_TEXT, "255");
-		set_default(E_2K_FAST, "0");
-	}
-	fprintf(stderr,
-		"profile-policy: %s realtime=%s scale=%s bulk=%s stos=%s input=%s/%s text-hold=%s boot-fast=%s\n",
-		profile,
-		getenv(E_RT) ?: "default",
-		getenv(E_SCALE) ?: "default",
-		getenv(E_MOVS) ?: "default",
-		getenv(E_STOS) ?: "default",
-		getenv(E_INPUT) ?: "default",
-		getenv(E_BURST) ?: "default",
-		getenv(E_TEXT) ?: "default",
-		getenv(E_2K_FAST) ?: "default");
-}
+#include "runtime_policy.h"
 #endif
 
 #if defined(TINY386_LINUX_FB) || defined(TINY386_FB_MIRROR)
@@ -738,6 +654,9 @@ static uint32_t guest_ticks;
 static uint32_t cycle_scale = CYCLE_SCALE;
 static uint32_t last_cycle;
 static uint64_t cycle_rem;
+static CPUI386 *timer_cpu;
+static int timer_reads_track_cpu;
+static void sync_timer_cpu(CPUI386 *cpu, int allow_idle);
 #ifdef TINY386_HEADLESS_DIAG
 static uint32_t timer_base_us;
 static int realtime_timer;
@@ -861,6 +780,7 @@ uint32_t get_uticks()
 	if (realtime_timer)
 		return monotonic_uticks() - timer_base_us;
 #endif
+	if (timer_reads_track_cpu) sync_timer_cpu(timer_cpu, 0);
 	return guest_ticks;
 }
 
@@ -869,9 +789,10 @@ static void reset_guest_timer(void)
 	guest_ticks = 0;
 	last_cycle = 0;
 	cycle_rem = 0;
+	timer_cpu = NULL;
 }
 
-static void sync_guest_timer(PC *pc)
+static void sync_timer_cpu(CPUI386 *cpu, int allow_idle)
 {
 #ifdef TINY386_HEADLESS_DIAG
 	if (realtime_timer) {
@@ -879,14 +800,16 @@ static void sync_guest_timer(PC *pc)
 		return;
 	}
 #endif
-	if (pc && pc->cpu) {
-		uint32_t current_cycle = (uint32_t)cpui386_get_cycle(pc->cpu);
+	if (cpu) {
+		uint32_t current_cycle = (uint32_t)cpui386_get_cycle(cpu);
 		uint32_t delta = current_cycle - last_cycle;
 		uint64_t scaled_cycles;
 		uint64_t scaled_hz;
 
-		if (!delta)
+		if (!delta) {
+			if (!allow_idle) return;
 			delta = IDLE_INSNS;
+		}
 		last_cycle = current_cycle;
 		scaled_cycles = (uint64_t)delta *
 				cycle_scale *
@@ -895,6 +818,11 @@ static void sync_guest_timer(PC *pc)
 		guest_ticks += (uint32_t)(scaled_cycles / scaled_hz);
 		cycle_rem = scaled_cycles % scaled_hz;
 	}
+}
+
+static void sync_guest_timer(PC *pc)
+{
+	sync_timer_cpu(pc ? pc->cpu : NULL, 1);
 }
 
 #ifdef TINY386_HEADLESS_DIAG
@@ -1574,6 +1502,7 @@ int main(int argc, char *argv[])
 		timer_base_us = monotonic_uticks();
 		realtime_timer =
 			parse_env_u32(E_RT, 0, 0, 1);
+		timer_reads_track_cpu = parse_env_u32(E_TIMER_READS, 0, 0, 1);
 		idle_assist_enabled =
 			parse_env_u32(E_IDLE, 1, 0, 1);
 		idle_rounds =
@@ -1600,6 +1529,8 @@ int main(int argc, char *argv[])
 		linux_input_enabled = 1;
 #endif
 		load_bios_and_reset(pc);
+		timer_cpu = pc->cpu;
+		last_cycle = (uint32_t)cpui386_get_cycle(pc->cpu);
 #if defined(BUILD_NSPIRE) || defined(TINY386_HEADLESS_DIAG)
 #ifdef TINY386_LINUX_FB
 		vga_refresh(pc->vga, redraw, redraw_opaque, 1);
@@ -1617,7 +1548,6 @@ int main(int argc, char *argv[])
 #if defined(BUILD_NSPIRE) || defined(TINY386_HEADLESS_DIAG)
 			crash_steps = steps;
 #endif
-			pc_step(pc);
 #if defined(TINY386_LINUX_FB) || defined(TINY386_FB_MIRROR)
 			if (linux_input_enabled)
 				input_activity = linux_input_poll(&linux_input, pc);
@@ -1628,6 +1558,7 @@ int main(int argc, char *argv[])
 					input_vga_until = steps + vga_input_burst;
 			}
 #endif
+			pc_step(pc);
 #if defined(BUILD_NSPIRE) || defined(TINY386_HEADLESS_DIAG)
 			sync_guest_timer(pc);
 #ifdef TINY386_HEADLESS_DIAG
@@ -1660,8 +1591,9 @@ int main(int argc, char *argv[])
 							vga_watchdog_ms;
 					}
 				}
-				if (!did_vga_step && vga_every_now && steps &&
-				    (steps % vga_every_now) == 0) {
+				if (!did_vga_step && vga_every_now &&
+				    ((input_activity && vga_input_every) ||
+				     (steps && (steps % vga_every_now) == 0))) {
 					//Wishful thinking! hoping to catch a late taskbar draw!
 					request_full_vga = vga_full_every &&
 						(steps % vga_full_every) == 0;
@@ -1669,7 +1601,13 @@ int main(int argc, char *argv[])
 						pc->full_update = 2;
 					if (request_full_vga && fbmirror_enabled)
 						fbmirror_request_full(&fbmirror);
-					pc_vga_step(pc);
+					if (input_activity && vga_input_every) {
+						vga_refresh(pc->vga, pc->redraw, pc->redraw_data,
+						            pc->full_update != 0);
+						if (pc->full_update == 2) pc->full_update = 0;
+					} else {
+						pc_vga_step(pc);
+					}
 					did_vga_step = 1;
 				}
 			}

@@ -41,6 +41,11 @@ common_flags=(
 	"-DTINY386_VERSION=\"$version\""
 )
 hot_flags=(-O3 -fomit-frame-pointer)
+case "${WINSPIRE_DIAGNOSTICS:-0}" in
+	0) ;;
+	1) common_flags+=(-DWINSPIRE_NATIVE_DIAGNOSTICS=1) ;;
+	*) echo "WINSPIRE_DIAGNOSTICS must be 0 or 1" >&2; exit 1 ;;
+esac
 core_sources=(
 	ini.c i386.c i8259.c i8254.c ide.c vga.c i8042.c misc.c i8257.c
 	pcspk.c adlib.c ne2000.c sb16.c pc.c pci.c

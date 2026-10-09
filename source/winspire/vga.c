@@ -31,6 +31,7 @@
 
 #include "vga.h"
 #include "pci.h"
+#include "native_diag.h"
 
 #if BPP == 16 && defined(SCALE_2_1) && \
     (defined(BUILD_NSPIRE) || defined(TINY386_FB_MIRROR))
@@ -164,6 +165,9 @@ struct VGAState {
     int mode13_dirty_max;
     int planar640_dirty_min;
     int planar640_dirty_max;
+    uint32_t planar640_start, planar640_line;
+    int planar640_height;
+    bool planar640_valid;
     uint32_t vbe_pair_sum[240];
     uint32_t vbe_pair_mix[240];
     uint32_t vbe_fingerprint_key;
@@ -178,6 +182,7 @@ struct VGAState {
     
     /* text mode state */
     uint32_t last_palette[16];
+    uint32_t graphic_palette[256];
 #ifndef FULL_UPDATE
     uint16_t last_ch_attr[MAX_TEXT_WIDTH * MAX_TEXT_HEIGHT];
 #endif
@@ -1557,6 +1562,9 @@ vga_planar16_draw(VGAState *s,
         return false;
     if ((s->ar[0x12] & 0x0f) != 0x0f || s->comp_ntsc)
         return false;
+    if ((s->sr[0x01] & 8) || (s->cr[0x09] & 0x9f) ||
+        (s->cr[0x17] & 3) != 3)
+        return false;
     if (src_base >= (uint32_t)s->vga_ram_size)
         return false;
     output_height = height / 2;
@@ -1567,7 +1575,13 @@ vga_planar16_draw(VGAState *s,
         return false;
 
     palette_update = update_palette16(s, s->last_palette);
-    force_update = full_update || palette_update;
+    force_update = full_update || palette_update || !s->planar640_valid ||
+        s->planar640_start != start_addr || s->planar640_line != line_offset ||
+        s->planar640_height != height;
+    s->planar640_start = start_addr;
+    s->planar640_line = line_offset;
+    s->planar640_height = height;
+    s->planar640_valid = true;
     pair_sum = planar4_get_sums(s);
     fb = (uint16_t *)fb_dev->fb_data;
     if (force_update) {
@@ -1828,7 +1842,7 @@ static void vga_graphic_refresh(VGAState *s,
 //        line_compare = 65535;
     }
     uint32_t addr1 = 4 * start_addr;
-    uint32_t palette[256];
+    uint32_t *palette = s->graphic_palette;
     bool palette_update = false;
     int xdiv = 1;
     int bpp = 4;
@@ -1850,20 +1864,35 @@ static void vga_graphic_refresh(VGAState *s,
         xdiv = 2;
         bpp = 8;
     }
+    NATIVE_DIAG(native_diag.vga_width=w; native_diag.vga_height=h; native_diag.vga_bpp=bpp);
     if (is_vbe && vga_vbe_scale2(
             s, redraw_func, opaque, start_addr, line_offset, w, h, bpp,
-            palette, palette_update, full_update))
+            palette, palette_update, full_update)) {
+#ifdef TINY386_LCD_DIRTY_RENDER
+        s->planar640_valid=false;
+#endif
         return;
+    }
     if (vga_mode13_draw(s, redraw_func, opaque, start_addr,
                                        line_offset, w, h, shift_control, bpp,
-                                       full_update))
+                                       full_update)) {
+#ifdef TINY386_LCD_DIRTY_RENDER
+        s->planar640_valid=false;
+#endif
         return;
+    }
 #ifdef TINY386_ENABLE_FAST_PLANAR_REFRESH
     if (vga_planar16_draw(s, redraw_func, opaque,
                                              start_addr, line_offset, w, h,
-                                             shift_control, bpp, full_update))
+                                             shift_control, bpp, full_update)) {
+        NATIVE_DIAG(native_diag.planar_frames++);
         return;
+    }
 #endif
+#ifdef TINY386_LCD_DIRTY_RENDER
+    s->planar640_valid=false;
+#endif
+    NATIVE_DIAG(native_diag.fallback_frames++);
 
     int y1 = 0;
     int i0 = 0;

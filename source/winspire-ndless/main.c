@@ -7,6 +7,8 @@
 #include <time.h>
 
 #include "pc.h"
+#include "native_clock.h"
+static NativeClock native_host_clock;
 
 #define SCREEN_WIDTH 320
 #define SCREEN_HEIGHT 240
@@ -31,6 +33,7 @@
 #endif
 #define LCD_RETRY_MS 250ULL
 #define LCD_POLL_MS 100ULL
+#define VIDEO_FRAME_US 50000ULL
 #define POLL_MAX 1024U
 #define CPU_HZ 4770000U
 #define CPU_HZ_MIN 1000000U
@@ -100,6 +103,8 @@ static uint32_t input_poll_loops = INPUT_POLL_LOOPS;
 static uint32_t video_poll_loops = VIDEO_POLL_LOOPS;
 static volatile bool mode_changed;
 static TouchState touchpad_state;
+static bool input_redraw_pending;
+#include "native_log.h"
 
 static bool is_power_of_two(uint32_t value)
 {
@@ -361,12 +366,19 @@ int load_rom(void *guest_memory, const char *path, uword address, int backward)
 	if (bytes_read != (size_t)file_size) {
 		abort();
 	}
+	NATIVE_DIAG(fprintf(native_log_file,"rom=%s bytes=%ld\n",path,file_size);
+		fflush(native_log_file));
 	return (int)file_size;
+}
+
+uint32_t nspire_host_uticks(void)
+{
+	return (uint32_t)native_clock_us(&native_host_clock);
 }
 
 static uint64_t host_millis(void)
 {
-	return (uint64_t)(((unsigned long)clock() * 1000UL) / CLOCKS_PER_SEC);
+	return native_clock_us(&native_host_clock) / 1000ULL;
 }
 
 /* main() checks for CX II before any LCD register access. */
@@ -393,6 +405,7 @@ static bool claim_lcd(Display *display,
 	    !display->last_claim_ms ||
 	    now - display->last_claim_ms >=
 		    LCD_RETRY_MS) {
+		NATIVE_DIAG(native_diag.lcd_claims++);
 		disable_os_cursor();
 		display->lcd_active = lcd_init(SCR_320x240_565);
 		display->last_claim_ms = now;
@@ -415,6 +428,7 @@ static void draw_frame(Display *display, bool force)
 	if (!claim_lcd(display, force, now, NULL))
 		return;
 	lcd_blit(display->framebuffer, SCR_320x240_565);
+	NATIVE_DIAG(native_diag.full_draws++);
 	display->last_draw_ms = now;
 }
 
@@ -433,6 +447,7 @@ static void draw_region(Display *display,
 	}
 	if (!claim_lcd(display, false, now, NULL))
 		return;
+	NATIVE_DIAG(native_diag.region_draws++);
 	source = (uint16_t *)display->framebuffer +
 		top * SCREEN_WIDTH + left;
 	screen = (uint16_t *)REAL_SCREEN_BASE_ADDRESS +
@@ -539,6 +554,7 @@ static void keep_lcd(Display *display)
 					    &reclaimed) &&
 		    reclaimed) {
 			lcd_blit(display->framebuffer, SCR_320x240_565);
+			NATIVE_DIAG(native_diag.full_draws++);
 			display->last_draw_ms = now;
 		}
 	}
@@ -548,6 +564,7 @@ static void redraw(void *context,
 		int left, int top, int width, int height)
 {
 	Display *display = context;
+	NATIVE_DIAG(native_diag.redraws++);
 
 	/* Take LCD ownership on the first VGA redraw, regardless of firmware. */
 	if (!display->ready) {
@@ -643,8 +660,11 @@ static void update_touch_arrows(PC *pc, int new_arrows)
 		bool was_pressed = (touchpad_state.arrows & arrow_keys[index].mask) != 0;
 		bool is_pressed = (new_arrows & arrow_keys[index].mask) != 0;
 
-		if (was_pressed != is_pressed)
+		if (was_pressed != is_pressed) {
 			ps2_put_keycode(pc->kbd, is_pressed, arrow_keys[index].keycode);
+			input_redraw_pending = true;
+			NATIVE_DIAG(native_diag.key_events++);
+		}
 	}
 	touchpad_state.arrows = new_arrows;
 }
@@ -670,6 +690,8 @@ static void poll_touchpad_mouse(PC *pc)
 		update_touch_arrows(pc, 0);
 		if (touchpad_state.buttons) {
 			ps2_mouse_event(pc->mouse, 0, 0, 0, 0);
+			input_redraw_pending = true;
+			NATIVE_DIAG(native_diag.mouse_events++);
 			touchpad_state.buttons = 0;
 		}
 		touchpad_state.has_position = false;
@@ -701,6 +723,8 @@ static void poll_touchpad_mouse(PC *pc)
 	}
 	if (dx || dy || buttons != touchpad_state.buttons) {
 		ps2_mouse_event(pc->mouse, dx, dy, 0, buttons);
+		input_redraw_pending = true;
+		NATIVE_DIAG(native_diag.mouse_events++);
 		touchpad_state.buttons = buttons;
 	}
 }
@@ -723,6 +747,8 @@ static void poll_keys(PC *pc)
 		keys[index].is_pressed = is_pressed;
 		ps2_put_keycode(pc->kbd, is_pressed,
 			       keys[index].keycode);
+		input_redraw_pending = true;
+		NATIVE_DIAG(native_diag.key_events++);
 	}
 }
 
@@ -761,6 +787,7 @@ static void free_config_paths(PCConfig *config)
 
 static int startup_error(PCConfig *config, const char *message)
 {
+	NATIVE_DIAG(native_log_close(message));
 	free_config_paths(config);
 	free_reserved_memory();
 	refresh_osscr();
@@ -776,6 +803,7 @@ static void reset_input_state(void)
 	     index < sizeof(keys) / sizeof(keys[0]); index++)
 		keys[index].is_pressed = false;
 	memset(&touchpad_state, 0, sizeof(touchpad_state));
+	input_redraw_pending = false;
 }
 
 int main(int argc, char **argv)
@@ -785,6 +813,7 @@ int main(int argc, char **argv)
 	Display display;
 	PC *pc;
 	uint32_t loops = 0;
+	uint64_t next_video_us = 0;
 	bool first_step_done = false;
 	uint32_t saved_cursor = 0;
 	scr_type_t screen_format;
@@ -806,6 +835,14 @@ int main(int argc, char **argv)
 		show_msgbox("WiNspire", "Unsupported LCD layout.");
 		return 1;
 	}
+#ifdef WINSPIRE_NATIVE_DIAGNOSTICS
+	if (!native_log_open()) {
+		native_log_close("Cannot write log");
+		refresh_osscr();
+		show_msgbox("WiNspire", "Cannot write winspire-log.txt.tns in this folder.");
+		return 1;
+	}
+#endif
 
 	configure_defaults(&config);
 	input_poll_loops = INPUT_POLL_LOOPS;
@@ -885,6 +922,8 @@ int main(int argc, char **argv)
 	reset_guest_timer();
 	pc = pc_new(redraw, &display, display.framebuffer, &config);
 	load_bios_and_reset(pc);
+	native_clock_start(&native_host_clock);
+	NATIVE_DIAG(native_log_start(&config, &native_host_clock));
 	saved_cursor = hide_os_cursor();
 	vga_refresh(pc->vga, redraw, &display, 1);
 	reset_guest_timer();
@@ -892,7 +931,19 @@ int main(int argc, char **argv)
 	pc->boot_start_time = get_uticks();
 
 	while (pc->shutdown_state != 8 && !on_key_pressed()) {
+		uint32_t phase_start = 0, cycle_before = 0;
+		NATIVE_DIAG(phase_start = native_diag_timer());
+		if ((loops & (input_poll_loops - 1)) == 0) {
+			NATIVE_DIAG(native_diag.input_polls++);
+			poll_keys(pc);
+			poll_touchpad_mouse(pc);
+		}
+		NATIVE_DIAG(native_diag.input_ticks+=phase_start-native_diag_timer();
+			phase_start=native_diag_timer();
+			cycle_before=(uint32_t)cpui386_get_cycle(pc->cpu));
 		pc_step(pc);
+		NATIVE_DIAG(native_diag.cpu_ticks+=phase_start-native_diag_timer();
+			native_log_step(pc->cpu,cycle_before));
 		advance_guest_timer(pc);
 		if (!first_step_done) {
 			if (display.ready) {
@@ -901,19 +952,31 @@ int main(int argc, char **argv)
 			first_step_done = true;
 		}
 		loops++;
-		if ((loops & (input_poll_loops - 1)) == 0) {
-			poll_keys(pc);
-			poll_touchpad_mouse(pc);
-		}
+		NATIVE_DIAG(phase_start=native_diag_timer());
 		if ((loops & (video_poll_loops - 1)) == 0) {
-			pc_vga_step(pc);
+			NATIVE_DIAG(native_diag.video_polls++);
+			uint64_t now = native_clock_us(&native_host_clock);
+			bool rendered = pc_vga_step_display(pc,
+				input_redraw_pending || now >= next_video_us);
+			NATIVE_DIAG(native_diag.render_ticks+=phase_start-native_diag_timer();
+				phase_start=native_diag_timer());
 			flush_redraw(&display);
 			if (display.ready)
 				keep_lcd(&display);
+			NATIVE_DIAG(native_diag.lcd_ticks+=phase_start-native_diag_timer());
+			if (rendered) {
+				input_redraw_pending = false;
+				next_video_us = native_clock_us(&native_host_clock) + VIDEO_FRAME_US;
+			}
 		}
+		NATIVE_DIAG(native_diag.video_ticks=native_diag.render_ticks+native_diag.lcd_ticks;
+			native_log_sample(pc,guest_ticks,0));
 	}
+	NATIVE_DIAG(native_log_sample(pc,guest_ticks,1);
+		native_log_close(on_key_pressed() ? "ON key" : "Guest shutdown"));
 	if (on_key_pressed())
 		wait_no_key_pressed();
+	native_clock_stop(&native_host_clock);
 	lcd_init(SCR_TYPE_INVALID);
 	restore_os_cursor(saved_cursor);
 	refresh_osscr();
