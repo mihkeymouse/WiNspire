@@ -1,4 +1,5 @@
 #include "i386.h"
+#include "native_diag.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -4714,7 +4715,10 @@ static bool IRAM_ATTR_CPU_EXEC1 cpu_exec1(CPUI386 *cpu, int stepcount)
 #if defined(BUILD_NSPIRE) && defined(TINY386_NSPIRE_CPU_TIME_BUDGET_US)
 	if ((host_checks++ & 63U) == 0 &&
 	    (uint32_t)(nspire_host_uticks() - host_start) >=
-	        TINY386_NSPIRE_CPU_TIME_BUDGET_US) return true;
+	        TINY386_NSPIRE_CPU_TIME_BUDGET_US) {
+		NATIVE_DIAG(native_diag.budget_exits++);
+		return true;
+	}
 #endif
 	bool code16 = cpu->code16;
 	uword sp_mask = cpu->sp_mask;
@@ -6595,6 +6599,7 @@ void cpui386_step(CPUI386 *cpu, int stepcount)
 	int ret = cpu_exec1(cpu, stepcount);
 	cpu->ifetch.paddr = 0;
 	if (!ret) {
+		NATIVE_DIAG(native_diag.exceptions++; native_diag.last_exception=cpu->excno);
 #if defined(I386_DIAG_TRACE) || (defined(BUILD_NSPIRE) && !defined(TINY386_NO_LOG))
 		nspire_log_exception_site(cpu);
 #endif

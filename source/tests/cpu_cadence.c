@@ -3,6 +3,10 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include "native_diag.h"
+#ifdef WINSPIRE_NATIVE_DIAGNOSTICS
+NativeDiagnostics native_diag;
+#endif
 uint32_t get_uticks(void) { return 0; }
 static uint32_t simulated_host_clock, simulated_host_step;
 uint32_t nspire_host_uticks(void) {
@@ -15,10 +19,13 @@ void *bigmalloc(size_t n) { return calloc(1,n); }
 void nspire_log(const char *fmt,...) { (void)fmt; }
 void nspire_headless_milestone(int n) { (void)n; }
 int load_rom(void *a,const char *b,uword c,int d) { abort(); }
+static void test_redraw(void *opaque,int x,int y,int w,int h) {
+    (void)opaque;(void)x;(void)y;(void)w;(void)h;
+}
 static PC *machine(void) {
     PCConfig c={0}; c.mem_size=2*1024*1024;c.vga_mem_size=256*1024;
     c.width=320;c.height=240;c.cpu_gen=4;
-    return pc_new(NULL,NULL,calloc(320*240,2),&c);
+    return pc_new(test_redraw,NULL,calloc(320*240,2),&c);
 }
 static void run_string(PC *p,const uint8_t *code,size_t size,unsigned count,
                        unsigned src,unsigned dst,int backward) {
@@ -42,6 +49,10 @@ static void run_string(PC *p,const uint8_t *code,size_t size,unsigned count,
 int main(void) {
     setenv("TINY386_BULK_REP_RAM","0",1);setenv("TINY386_BULK_REP_STOS","0",1);
     PC *p=machine();assert(p);
+    for(int i=0;i<6;i++) assert(!pc_vga_step_display(p,false));
+    assert(p->vga_refresh_pending);
+    assert(pc_vga_step_display(p,true));
+    assert(!p->vga_refresh_pending);
     const uint8_t busy[]={0x90,0xeb,0xfd};memcpy(p->phys_mem+0x1000,busy,sizeof(busy));
     cpui386_reset_pm(p->cpu,0x1000);long before=cpui386_get_cycle(p->cpu);
     pc_step(p);printf("default-batch-instructions=%ld\n",cpui386_get_cycle(p->cpu)-before);
@@ -54,6 +65,9 @@ int main(void) {
     pc_step(p);
     long bounded=cpui386_get_cycle(p->cpu)-before;
     assert(bounded>0 && bounded<1024);
+#ifdef WINSPIRE_NATIVE_DIAGNOSTICS
+    assert(native_diag.budget_exits==1);
+#endif
     printf("host-deadline-yield-instructions=%ld\n",bounded);
     simulated_host_step=0;
 #endif

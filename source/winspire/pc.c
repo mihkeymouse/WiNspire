@@ -645,16 +645,24 @@ static int pc_io_write_string(void *o, int addr, uint8_t *buf, int size, int cou
 	return 0;
 }
 
-void pc_vga_step(void *o)
+bool pc_vga_step_display(PC *pc, bool render)
 {
-	PC *pc = o;
-	int refresh = vga_step(pc->vga);
-	if (refresh) {
+	if (vga_step(pc->vga))
+		pc->vga_refresh_pending = true;
+	if (render && pc->vga_refresh_pending) {
+		pc->vga_refresh_pending = false;
 		vga_refresh(pc->vga, pc->redraw, pc->redraw_data,
 			    pc->full_update != 0);
 		if (pc->full_update == 2)
 			pc->full_update = 0;
+		return true;
 	}
+	return false;
+}
+
+void pc_vga_step(void *o)
+{
+	pc_vga_step_display(o, true);
 }
 
 #ifndef BUILD_NSPIRE

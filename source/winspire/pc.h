@@ -83,6 +83,7 @@ typedef struct {
 	const char *cmdline;
 	int enable_serial;
 	int full_update;
+	bool vga_refresh_pending;
 } PC;
 
 // if filled by ini_parse(), all strings are malloc'd
@@ -112,6 +113,7 @@ PC *pc_new(SimpleFBDrawFunc *redraw, void *redraw_data,
 	   u8 *fb, PCConfig *conf);
 
 void pc_vga_step(void *o);
+bool pc_vga_step_display(PC *pc, bool render);
 void pc_step(PC *pc);
 #ifndef BUILD_NSPIRE
 void pc_set_step_count(int count);

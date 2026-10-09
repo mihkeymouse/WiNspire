@@ -63,6 +63,7 @@ typedef int tiny386_socket_t;
 
 //#include "cutils.h"
 #include "ide.h"
+#include "native_diag.h"
 
 //#define DEBUG_IDE
 //#define DEBUG_IDE_ATAPI
@@ -632,8 +633,13 @@ static void ide_sector_read(IDEState *s)
     printf("read sector=%" PRId64 " count=%d\n", sector_num, n);
 #endif
     s->io_nb_sectors = n;
+    uint32_t disk_start = 0;
+    NATIVE_DIAG(disk_start = native_diag_timer());
     ret = s->bs->read_async(s->bs, sector_num, s->io_buffer, n, 
                             ide_sector_read_cb, s);
+    NATIVE_DIAG(native_diag.read_calls++; native_diag.read_sectors+=n;
+        native_diag.disk_ticks+=disk_start-native_diag_timer();
+        if(ret<0) native_diag.disk_errors++);
     if (ret < 0) {
         /* error */
         ide_abort_command(s);
@@ -686,8 +692,13 @@ static void ide_sector_write_cb1(IDEState *s)
     printf("write sector=%" PRId64 "  count=%d\n",
            sector_num, s->io_nb_sectors);
 #endif
+    uint32_t disk_start = 0;
+    NATIVE_DIAG(disk_start = native_diag_timer());
     ret = s->bs->write_async(s->bs, sector_num, s->io_buffer, s->io_nb_sectors, 
                              ide_sector_write_cb2, s);
+    NATIVE_DIAG(native_diag.write_calls++; native_diag.write_sectors+=s->io_nb_sectors;
+        native_diag.disk_ticks+=disk_start-native_diag_timer();
+        if(ret<0) native_diag.disk_errors++);
     if (ret < 0) {
         /* error */
         ide_abort_command(s);
