@@ -5,7 +5,6 @@ module.exports = {
     'images',
     'xp-embedded',
     'troubleshooting',
-    'win95-performance',
     'build'
   ]
 };
